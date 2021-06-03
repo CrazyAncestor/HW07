@@ -7,8 +7,7 @@ double f( const double x, const double y )
     return sin(x) * sin(y) + background_pot;
 } // FUNCTION : f
 
-
-
+extern double absolute(double x);
 void solved( matrix &m )
 {
     const int dim = m.get_dim();
@@ -28,271 +27,206 @@ void solved( matrix &m )
 
 } // FUNCTION : solved
 
-
-//--------------------------------------------------------------------------------
-// Function    : V_Cycle
-// Description : 
-// Note        :
-// Input       : phi  : Potential of the test problem
-//               dens : Density
-// Output      : Solved potential 2D array
-//--------------------------------------------------------------------------------
-matrix V_Cycle( matrix phi, matrix dens )
-{   
-    const int smooth_step  = 3;
-    const int exact_step   = 100;
-    const double SOR_omega = 1.9;
-    const int n = dens.get_dim();
-
-    // the smallest grid size, do the exact solver
-    if ( n <= 3 )
-    {
-          // Exact solver
-          matrix eps( phi.get_dim(), phi.get_h() );
-          matrix dens2 = dens.Restriction();
-          eps.SOR_smoothing( dens2, SOR_omega, exact_step );
-    }
-
-    else{
-        // Pre-Smoothing
-        phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-        
-        // Compute Residual Errors
-        matrix r = phi.Residual( dens );
-    
-        // Restriction
-        matrix rhs = r.Restriction();
-        
-        matrix eps( rhs.get_dim(), rhs.get_h() );
-        
-        // Go to smaller grid size
-        eps = V_Cycle( eps, rhs );  
-    
-        // Prolongation and Correction
-        phi = phi + eps.Interpolation( phi.get_dim() );
-        
-        // Post-Smoothing
-    }
-    
-    phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-    
-    return phi;
-
-} // FUNCTION : V_Cycle
-
-
-//--------------------------------------------------------------------------------
-// Function    : W_Cycle
-// Description : 
-// Note        :
-// Input       : phi  :
-//               dens :
-//               LR   : 0 : the left valley of the W cycle
-//                      1 : the right valley of the W cycle
-// Output      :
-//--------------------------------------------------------------------------------
-matrix W_Cycle( matrix phi, matrix dens, const int LR )
+void solved( double ** a,int dim,double h )
 {
-     const int smooth_step  = 100;
-     const int exact_step   = 3;
-     const double SOR_omega = 1.9;
-     const int n = dens.get_dim();
-     
-     // the smallest grid size, do the exact solver
-     if ( n <= 3 )
-     {
-          // Exact solver
-          matrix eps( phi.get_dim(), phi.get_h() );
-          matrix dens2 = dens.Restriction();
-          eps.SOR_smoothing( dens2, SOR_omega, exact_step );
-     }
-     // stop recursion at smallest grid size
-     else if ( n <= 7 ) // if ( n <= 3 )
-     {
-          // Pre-Smoothing
-          phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-          
-          // Restriction
-          matrix r = phi.Residual( dens );
-          matrix rhs = r.Restriction();
-          
-          // Exact solver
-          matrix eps( rhs.get_dim(), rhs.get_h() );
-          matrix dens2 = dens.Restriction();
-          eps.SOR_smoothing( dens2, SOR_omega, exact_step );
-          
-          // Prolongation
-          phi = phi + eps.Interpolation( phi.get_dim() );
-          
-          // Don't do the Post-smoothing for the left valley
-          if ( LR == 1 )
-          {
-               // Post-Smoothing
-               phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-          }
-     }
-     else // if ( n <= 3 ) ... else if ( n <= 7 ) ...
-     {
-          // Pre-Smoothing
-          phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-          
-          // Restriction
-          matrix r   = phi.Residual( dens );
-          matrix rhs = r.Restriction();
-          matrix eps( rhs.get_dim(), rhs.get_h() );
-          
-          // Left valley
-          eps = W_Cycle( eps, rhs, 0 );
-  
-          // Right valley
-          eps = W_Cycle( eps, rhs, 1 );
-          
-          // Prolongation
-          phi = phi + eps.Interpolation( phi.get_dim() );
-          
-          // Don't do the Post-smoothing for the left valley
-          if ( LR == 1 )
-          {
-               // Post-Smoothing
-               phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-          }
-     } // if ( n <= 3 ) ... else if ( n <= 7 ) ... else ...
-     
-     return phi;
-   
-} // FUNCTION : W_Cycle
 
-//--------------------------------------------------------------------------------
-// Function    : FAS_Method
-// Description : 
-// Note        :
-// Input       : phi  : Potential of the test problem
-//               dens : Density
-// Output      : Solved potential 2D array
-//--------------------------------------------------------------------------------
-matrix FAS_Method( matrix phi, matrix dens )
-{   
-    const int smooth_step  = 3;
-    const int exact_step   = 100;
-    const double SOR_omega = 1.9;
-    const int n = dens.get_dim();
-
-    // the smallest grid size, do the exact solver
-    if ( n <= 3 )
+    const int dim_2 = dim*dim;
+    
+    for ( int idx = 0; idx < dim_2; idx++ )
     {
-          // Exact solver
-          matrix eps( phi.get_dim(), phi.get_h() );
-          matrix dens2 = dens.Restriction();
-          eps.SOR_smoothing( dens2, SOR_omega, exact_step );
-    }
+        const int i = idx / dim;
+        const int j = idx % dim;
+        
+        const double x = h*i;
+        const double y = h*j;
+      
+        a[i][j] =  f(x, y) ;
+    } // for ( int idx = 0; idx < dim_2; idx++ )
+
+} // FUNCTION : solved
+
+//Initialize Density Array
+void init_density(double **dens,double h,int dim)
+{
+    for( int i = 0; i < dim; i++ )
+    {
+        for( int j = 0; j < dim; j++ )
+        {
+            double x = h*i;
+            double y = h*j;
+
+            dens[i][j] = -2.*sin(x)*sin(y);
+        } // for( int j = 0; j < dim; j++ )
+    } // for( int i = 0; i < dim; i++ )
+
+} //FUNCTION : init_density
+
+//Initialize Potential Array
+void init_potential(double **pot,double h,int dim)
+{
+    for( int i = 0; i < dim; i++ )
+    {
+        for( int j = 0; j < dim; j++ )
+        {
+            pot[i][j] = background_pot;
+        } // for( int j = 0; j < dim; j++ )
+    } // for( int i = 0; i < dim; i++ )
+
+} //FUNCTION : init_density
+
+void SOR(double **pot, double **rho,int dim,double h, double omega, bool odd )
+{
+
+    if(odd){
+        for (int i = 0; i < dim; i++) {
+            for (int j = 0; j < dim; j++) {
+                if ((i + j) % 2 == 1) {
+                    if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
+                        pot[i][j] += omega * 0.25 * (pot[i + 1][j] + pot[i - 1][j] + pot[i][j + 1] + pot[i][j - 1] - pot[i][j] * 4 - h * h * rho[i][j]);
+                    } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
+                } //if ((i + j) % 2 == 0)
+            } //for (int j = 0; j < dim; j++)
+        } //for (int i = 0; i < dim; i++) 
+    }              
 
     else{
-        // Pre-Smoothing
-        phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-        
-        // Compute Residual Errors
-        matrix res = phi.Residual( dens );
-    
-        // Restriction
-        matrix res_coarse = res.Restriction();
-        
-        matrix phi_coarse = phi.Restriction();
+        for (int i = 0; i < dim; i++) {
+            for (int j = 0; j < dim; j++) {
+                if ((i + j) % 2 == 0) {
+                    if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
+                        pot[i][j] += omega * 0.25 * (pot[i + 1][j] + pot[i - 1][j] + pot[i][j + 1] + pot[i][j - 1] - pot[i][j] * 4 - h * h * rho[i][j]);
+                    } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
+                } //if ((i + j) % 2 == 0)
+            } //for (int j = 0; j < dim; j++)
+        } //for (int i = 0; i < dim; i++) 
+    }    
+}
 
-        matrix dens_coarse = phi_coarse.Laplacian() +res_coarse;
-        
-        // Go to smaller grid size
-        phi_coarse = V_Cycle( phi_coarse, dens_coarse );  
-    
-        // Prolongation and Correction
-        matrix corr = phi_coarse -phi.Restriction();
-        phi = phi + corr.Interpolation( phi.get_dim() );
-        
-        // Post-Smoothing
-        phi.SOR_smoothing( dens, SOR_omega, smooth_step );
-    }
-    
-    
-    
-    return phi;
-
-} // FUNCTION : FAS_Method
-
-//--------------------------------------------------------------------------------
-// Function    : FMG_Method
-// Description : 
-// Note        :
-// Input       : phi  : Potential of the test problem
-//               dens : Density
-//               n_fmg: On each working level, one applies n_fmg MG cycles
-// Output      : Solved potential 2D array
-//--------------------------------------------------------------------------------
-matrix FMG_Method( matrix phi, matrix dens, int n_fmg)
-{   
-    const int smooth_step  = 3;
-    const int exact_step   = 100;
-    const double SOR_omega = 1.9;
-    const int n = dens.get_dim();
-
-    if(n<3){
-        phi.SOR_smoothing( dens, SOR_omega, exact_step );
-    }
-    else{
-        matrix phi_coarse = phi.Restriction();
-        matrix dens_coarse = dens.Restriction();
-        phi_coarse = FMG_Method( phi_coarse, dens_coarse,n_fmg);
-        phi = phi_coarse.Interpolation(n);
-        for(int i=0;i<n_fmg;i++){
-            phi = V_Cycle( phi, dens );
+void display(double **matrix,int dim)
+{
+    for( int i=0; i<dim; i++ )
+    {
+        for( int j=0; j<dim; j++ )
+        {
+            cout << matrix[i][j] << " ";
         }
+        cout << endl;
     }
-    return phi;
-
-} // FUNCTION : FMG_Method
-
-
-int main()
+} 
+void Error( double **a,double **b,int dim )
 {
-    int N = 2000;
+    double sum = 0;
+    double ave = 0;
+    
+    for( int i = 0; i < dim; i++ )
+    {
+        for( int j = 0; j < dim; j++ )
+        {
+            sum += absolute(a[i][j]-b[i][j]);
+            ave += absolute(b[i][j]);
+        }
+        
+    } // for( int i = 0; i < dim; i++ )
+
+    cout << sum/ave << endl;
+
+} //FUNCTION : Error
+double **alloc_2d_init(int rows, int cols) {
+    double *data = (double *)malloc(rows*cols*sizeof(double));
+    double **array= (double **)malloc(rows*sizeof(double*));
+    for (int i=0; i<rows; i++){
+        array[i] = &(data[cols*i]);}
+
+    return array;
+}
+int main( int argc, char *argv[] )
+{
+    int NRank, MyRank;
+    MPI_Init( &argc, &argv );
+    MPI_Comm_rank( MPI_COMM_WORLD, &MyRank );
+    MPI_Comm_size( MPI_COMM_WORLD, &NRank );
+    printf( "Hello World on rank %d/%d\n", MyRank, NRank );
+    
+
+    //Set Physical Parameters
+    int N_steps = 1000;
+    int N = 10;
     double h = PI/(N-1);
-    matrix pot( N, h );
-    pot.init_potential();
+    double SOR_omega = 1.9;
     
-    matrix dens( N, h );
-    dens.init_density();
+    bool option_parallel = 0;
     
-    matrix ans( N, h );
-    solved(ans);
-    
-    /*matrix solution = V_Cycle( pot, dens );
-    pot.init_potential();
-    matrix solution2 = W_Cycle( pot, dens, 1 );
-    pot.init_potential();
+    //Parallelized
+    if(option_parallel)
+    {
+        //Initialize Potential and Density
+        double **potential01,**potential02,**density,**ans;
+        potential01 = alloc_2d_init(N,N);
+        potential02 = alloc_2d_init(N,N);
+        density   = alloc_2d_init(N,N);
+        ans         = alloc_2d_init(N,N);
+
+        init_potential(potential01,h,N);
+        init_potential(potential02,h,N);
+        init_density(density,h,N);
+        solved(ans,N,h);
         
-    solution.Error( ans );
-    solution2.Error( ans );*/
+        //Set Parallelization parameter
+        bool odd;
+        if(MyRank==0)odd = 0;
+        else         odd = 1;
 
-    
-    auto start = chrono::steady_clock::now();
+        const int Count=N*N, TargetRank=(MyRank+1)%2, Tag=123;\
+        const int NReq= 2;
+        MPI_Request Req[NReq];
 
-    // V,W-Cycle
-    matrix solution = V_Cycle( pot, dens );
-    pot.init_potential();
-    matrix solution2 = W_Cycle( pot, dens, 1 );
-    pot.init_potential();
+        //Begin SOR iteration
+        for(int steps = 0;steps<N_steps;steps++){
+            SOR(potential01,density,N,h,SOR_omega,odd);
+            MPI_Irecv(  &(potential02[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[0] );
+            MPI_Isend( &(potential01[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[1] );
+            
+            MPI_Waitall( NReq, Req, MPI_STATUSES_IGNORE );
+           
+            SOR(potential02,density,N,h,SOR_omega,odd);
+
+            MPI_Irecv( &(potential01[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[0] );
+            MPI_Isend( &(potential02[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[1] );
+            MPI_Waitall( NReq, Req, MPI_STATUSES_IGNORE );
+        }
         
-    solution.Error( ans );
-    solution2.Error( ans );
+       
+        if(MyRank==0)Error(potential02,ans,N);
+    }
     
-    //FMG Method
-    matrix solution3 = FMG_Method( pot, dens,2);
     
-    pot.init_potential();
+    
+    else
+    {//Initialize Potential and Density
+        double **potential01,**potential02,**density,**ans;
+        potential01 = alloc_2d_init(N,N);
+        potential02 = alloc_2d_init(N,N);
+        density   = alloc_2d_init(N,N);
+        ans         = alloc_2d_init(N,N);
 
-    matrix ans3(solution3.get_dim(),solution3.get_h());
-    solved(ans3);
-    solution3.Error(ans3);
+        init_potential(potential01,h,N);
+        init_potential(potential02,h,N);
+        init_density(density,h,N);
+        solved(ans,N,h);
+        
+        //Set Parallelization parameter
+        bool odd,even;
+        odd = 0;
+        even = 1;
 
-    auto elapsed = chrono::steady_clock::now() - start;
-    auto sec_double = chrono::duration<double>(elapsed);     // double
-    cout<<sec_double.count()<<endl;
+        //Begin SOR iteration
+        for(int steps = 0;steps<N_steps*2;steps++){
+            SOR(potential01,density,N,h,SOR_omega,odd);
+            SOR(potential01,density,N,h,SOR_omega,even);
+        }
+        
+       
+        if(MyRank==0)Error(potential01,ans,N);
+    }
+    MPI_Finalize();
 } // FUNCTION : main 

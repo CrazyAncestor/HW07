@@ -66,11 +66,9 @@ void matrix::Error( const matrix &b )
 void matrix::SOR_smoothing( const matrix &rho, double omega, int steps )
 {
      for (int t = 0; t < steps; t++) {
-#  pragma omp parallel num_threads(2) 
+
             {
-                const int tid = omp_get_thread_num();
-                
-#     pragma omp for collapse(2)
+
                     for (int i = 0; i < dim; i++) {
                         for (int j = 0; j < dim; j++) {
                             if ((i + j) % 2 == 0) {
@@ -81,8 +79,7 @@ void matrix::SOR_smoothing( const matrix &rho, double omega, int steps )
                         } //for (int j = 0; j < dim; j++)
                     } //for (int i = 0; i < dim; i++) 
                 
-#     pragma omp barrier
-#     pragma omp for collapse(2)
+
                     for (int i = 0; i < dim; i++) {
                         for (int j = 0; j < dim; j++) {
                             if ((i + j) % 2 == 1) {
@@ -94,7 +91,7 @@ void matrix::SOR_smoothing( const matrix &rho, double omega, int steps )
                     } //for (int i = 0; i < dim; i++) 
                 
 
-            } //#    pragma omp parallel
+            } 
         } //for (int t = 0; t < steps; t++)
 
 } // FUNCTION : matrix::SOR_smoothing

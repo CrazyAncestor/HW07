@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <iostream>
 #include <math.h>
-#include<omp.h>
+#include <mpi.h>
 #include<chrono>
 #include "vector"
 
 using namespace std;
 
-#define background_pot 10.
+#define background_pot 0.
 class matrix
 { 
     int dim;

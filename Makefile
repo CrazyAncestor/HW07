@@ -1,11 +1,11 @@
-CC:=g++
+CC:= mpic++
 exe:=main
 obj:=main.o matrix.o
 
 all:$(obj)
-	$(CC)  -fopenmp -o $(exe) $(obj)
+	$(CC) -o $(exe) $(obj)
 %.o:%.cpp 
-	$(CC)  -fopenmp -c $^ -o $@ 
+	$(CC) -c $^ -o $@ 
 
 .PHONY:clean
 clean:
