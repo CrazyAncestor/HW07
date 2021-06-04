@@ -1,6 +1,6 @@
 CC:= mpic++
 exe:=main
-obj:=main.o matrix.o
+obj:=main.o 
 
 all:$(obj)
 	$(CC) -o $(exe) $(obj)

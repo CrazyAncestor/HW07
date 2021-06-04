@@ -1,4 +1,14 @@
-#include "classes.h"
+
+#include <stdlib.h>
+#include <iostream>
+#include <math.h>
+#include <mpi.h>
+#include<chrono>
+#include "vector"
+
+using namespace std;
+
+#define background_pot 10.
 #define PI 3.14159265359
 
 
@@ -7,26 +17,10 @@ double f( const double x, const double y )
     return sin(x) * sin(y) + background_pot;
 } // FUNCTION : f
 
-extern double absolute(double x);
-void solved( matrix &m )
-{
-    const int dim = m.get_dim();
-    const int dim_2 = dim*dim;
-    
-    for ( int idx = 0; idx < dim_2; idx++ )
-    {
-        const int i = idx / dim;
-        const int j = idx % dim;
-        
-        const double h = m.get_h();
-        const double x = h*i;
-        const double y = h*j;
-      
-        m.input_answer( i, j, f(x, y) );
-    } // for ( int idx = 0; idx < dim_2; idx++ )
-
-} // FUNCTION : solved
-
+double absolute(double x){
+    if(x>=0)return x;
+    return -x;
+}
 void solved( double ** a,int dim,double h )
 {
 
@@ -74,7 +68,7 @@ void init_potential(double **pot,double h,int dim)
 
 } //FUNCTION : init_density
 
-void SOR(double **pot, double **rho,int dim,double h, double omega, bool odd )
+void SOR(double **pot_com,double **pot_ref, double **rho,int dim,double h, double omega, bool odd )
 {
 
     if(odd){
@@ -82,7 +76,7 @@ void SOR(double **pot, double **rho,int dim,double h, double omega, bool odd )
             for (int j = 0; j < dim; j++) {
                 if ((i + j) % 2 == 1) {
                     if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
-                        pot[i][j] += omega * 0.25 * (pot[i + 1][j] + pot[i - 1][j] + pot[i][j + 1] + pot[i][j - 1] - pot[i][j] * 4 - h * h * rho[i][j]);
+                        pot_com[i][j] +=  omega * 0.25 * (pot_ref[i + 1][j] + pot_ref[i - 1][j] + pot_ref[i][j + 1] + pot_ref[i][j - 1] - pot_com[i][j] * 4 - h * h * rho[i][j]);
                     } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
                 } //if ((i + j) % 2 == 0)
             } //for (int j = 0; j < dim; j++)
@@ -94,7 +88,43 @@ void SOR(double **pot, double **rho,int dim,double h, double omega, bool odd )
             for (int j = 0; j < dim; j++) {
                 if ((i + j) % 2 == 0) {
                     if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
-                        pot[i][j] += omega * 0.25 * (pot[i + 1][j] + pot[i - 1][j] + pot[i][j + 1] + pot[i][j - 1] - pot[i][j] * 4 - h * h * rho[i][j]);
+                        pot_com[i][j] += omega * 0.25 * (pot_ref[i + 1][j] + pot_ref[i - 1][j] + pot_ref[i][j + 1] + pot_ref[i][j - 1] - pot_com[i][j] * 4 - h * h * rho[i][j]);
+                    } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
+                } //if ((i + j) % 2 == 0)
+            } //for (int j = 0; j < dim; j++)
+        } //for (int i = 0; i < dim; i++) 
+    }    
+}
+void SOR(double **pot_com,double **pot_ref, double **rho,int dim,double h, double omega, bool odd,bool upper )
+{
+    int half = int(dim/2);
+    int i_low,i_high;
+    if(upper){
+        i_low = 0;
+        i_high = half;
+    }
+    else{
+        i_low = half;
+        i_high = dim;
+    }
+    if(odd){
+        for (int i = i_low; i < i_high; i++) {
+            for (int j = 0; j < dim; j++) {
+                if ((i + j) % 2 == 1) {
+                    if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
+                        pot_com[i][j] +=  omega * 0.25 * (pot_ref[i + 1][j] + pot_ref[i - 1][j] + pot_ref[i][j + 1] + pot_ref[i][j - 1] - pot_com[i][j] * 4 - h * h * rho[i][j]);
+                    } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
+                } //if ((i + j) % 2 == 0)
+            } //for (int j = 0; j < dim; j++)
+        } //for (int i = 0; i < dim; i++) 
+    }              
+
+    else{
+        for (int i = i_low; i < i_high; i++) {
+            for (int j = 0; j < dim; j++) {
+                if ((i + j) % 2 == 0) {
+                    if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1) {
+                        pot_com[i][j] += omega * 0.25 * (pot_ref[i + 1][j] + pot_ref[i - 1][j] + pot_ref[i][j + 1] + pot_ref[i][j - 1] - pot_com[i][j] * 4 - h * h * rho[i][j]);
                     } //if (i != 0 && i != dim - 1 && j != 0 && j != dim - 1)
                 } //if ((i + j) % 2 == 0)
             } //for (int j = 0; j < dim; j++)
@@ -102,17 +132,20 @@ void SOR(double **pot, double **rho,int dim,double h, double omega, bool odd )
     }    
 }
 
-void display(double **matrix,int dim)
+void filling(double **pot, double **pot_rec,int dim, int row )
 {
-    for( int i=0; i<dim; i++ )
-    {
-        for( int j=0; j<dim; j++ )
-        {
-            cout << matrix[i][j] << " ";
-        }
-        cout << endl;
+for(int j=0;j<dim;j++){
+    pot_rec[0][j] = pot[row][j];
+    //cout<<pot_rec[0][j]<<" ";
+        
     }
-} 
+    //cout<<endl;
+}
+void refilling(double **pot, double **pot_rec,int dim, int row )
+{
+for(int j=0;j<dim;j++) pot[row][j] = pot_rec[0][j];
+}
+
 void Error( double **a,double **b,int dim )
 {
     double sum = 0;
@@ -139,6 +172,15 @@ double **alloc_2d_init(int rows, int cols) {
 
     return array;
 }
+void init_rec(double** pot_rec,int dim){
+    //pot_rec = new double[dim];
+    for( int i = 0; i < dim; i++ )
+    {
+        pot_rec[0][i]=0.;
+        //cout<<pot_rec[0][i]<<" ";
+    }
+    //cout<<endl;
+}
 int main( int argc, char *argv[] )
 {
     int NRank, MyRank;
@@ -149,84 +191,131 @@ int main( int argc, char *argv[] )
     
 
     //Set Physical Parameters
-    int N_steps = 1000;
-    int N = 10;
+    int N_steps = 100;
+    int iter = 1;
+    int N = 2000;
+    int half = int(N/2);
     double h = PI/(N-1);
     double SOR_omega = 1.9;
     
-    bool option_parallel = 0;
+    bool option_parallel;
+    if(NRank==1)option_parallel = 0;
+    else option_parallel = 1;
     
+    //Set CLock
+    auto start = chrono::steady_clock::now();
+
     //Parallelized
     if(option_parallel)
     {
         //Initialize Potential and Density
-        double **potential01,**potential02,**density,**ans;
-        potential01 = alloc_2d_init(N,N);
-        potential02 = alloc_2d_init(N,N);
+        double **pot,**potential_receive,**density,**ans;
+        pot = alloc_2d_init(N,N);
+        potential_receive = alloc_2d_init(1,N);
         density   = alloc_2d_init(N,N);
         ans         = alloc_2d_init(N,N);
 
-        init_potential(potential01,h,N);
-        init_potential(potential02,h,N);
+        init_potential(pot,h,N);
+        init_rec(potential_receive,N);
         init_density(density,h,N);
         solved(ans,N,h);
         
         //Set Parallelization parameter
-        bool odd;
-        if(MyRank==0)odd = 0;
-        else         odd = 1;
+        bool odd=1,even=0;
+        bool upper =1, lower =0;
 
-        const int Count=N*N, TargetRank=(MyRank+1)%2, Tag=123;\
+        const int Count=N, TargetRank=(MyRank+1)%2, Tag=123;
         const int NReq= 2;
         MPI_Request Req[NReq];
 
-        //Begin SOR iteration
-        for(int steps = 0;steps<N_steps;steps++){
-            SOR(potential01,density,N,h,SOR_omega,odd);
-            MPI_Irecv(  &(potential02[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[0] );
-            MPI_Isend( &(potential01[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[1] );
-            
-            MPI_Waitall( NReq, Req, MPI_STATUSES_IGNORE );
-           
-            SOR(potential02,density,N,h,SOR_omega,odd);
-
-            MPI_Irecv( &(potential01[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[0] );
-            MPI_Isend( &(potential02[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, &Req[1] );
-            MPI_Waitall( NReq, Req, MPI_STATUSES_IGNORE );
-        }
         
-       
-        if(MyRank==0)Error(potential02,ans,N);
+        //Begin SOR iteration
+        
+        for(int steps = 0;steps<N_steps;steps++){
+            //First compute odd cases
+            if(MyRank==0) SOR(pot,pot,density,N,h,SOR_omega,odd,upper);
+            else if(MyRank==1) SOR(pot,pot,density,N,h,SOR_omega,odd,lower);
+
+            //send & receive boundary
+
+            filling(pot,potential_receive,N,half-1);            
+            if(MyRank==1) MPI_Recv( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, MPI_STATUSES_IGNORE );
+            else if(MyRank==0) MPI_Ssend( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD );  
+            refilling(pot,potential_receive,N,half-1);
+
+            filling(pot,potential_receive,N,half);
+            if(MyRank==0) MPI_Recv( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, MPI_STATUSES_IGNORE );
+            if(MyRank==1) MPI_Ssend( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD );
+            refilling(pot,potential_receive,N,half);
+            
+
+            //Then compute even cases
+            if(MyRank==0) SOR(pot,pot,density,N,h,SOR_omega,even,upper);
+            else if(MyRank==1) SOR(pot,pot,density,N,h,SOR_omega,even,lower);
+
+            //send & receive boundary
+
+            filling(pot,potential_receive,N,half-1);            
+            if(MyRank==1) MPI_Recv( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, MPI_STATUSES_IGNORE );
+            else if(MyRank==0) MPI_Ssend( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD );  
+            refilling(pot,potential_receive,N,half-1);
+
+            filling(pot,potential_receive,N,half);
+            if(MyRank==0) MPI_Recv( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, MPI_STATUSES_IGNORE );
+            if(MyRank==1) MPI_Ssend( &(potential_receive[0][0]), Count, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD );
+            refilling(pot,potential_receive,N,half);
+
+        }
+
+        double **pot_lowerfinal = alloc_2d_init(N,N);
+        
+        if(MyRank==0) MPI_Recv( &(pot_lowerfinal[0][0]), N*N, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD, MPI_STATUSES_IGNORE );
+        if(MyRank==1) MPI_Ssend( &(pot[0][0]), N*N, MPI_DOUBLE, TargetRank, Tag, MPI_COMM_WORLD );
+        if(MyRank==0) {
+            for(int i=half;i<N;i++){
+            for(int j=0;j<N;j++){
+                pot[i][j] = pot_lowerfinal[i][j];
+        }
+        }
+        }
+
+        if(MyRank==0)Error(pot,ans,N);
     }
     
     
     
     else
     {//Initialize Potential and Density
-        double **potential01,**potential02,**density,**ans;
-        potential01 = alloc_2d_init(N,N);
-        potential02 = alloc_2d_init(N,N);
+        double **pot,**potential_receive,**density,**ans;
+        pot = alloc_2d_init(N,N);
+        potential_receive = alloc_2d_init(N,N);
         density   = alloc_2d_init(N,N);
         ans         = alloc_2d_init(N,N);
 
-        init_potential(potential01,h,N);
-        init_potential(potential02,h,N);
+        init_potential(pot,h,N);
+        init_potential(potential_receive,h,N);
         init_density(density,h,N);
         solved(ans,N,h);
         
         //Set Parallelization parameter
         bool odd,even;
-        odd = 0;
-        even = 1;
+        odd = 1;
+        even = 0;
 
         //Begin SOR iteration
-        for(int steps = 0;steps<N_steps*2;steps++){
-            SOR(potential01,density,N,h,SOR_omega,odd);
-            SOR(potential01,density,N,h,SOR_omega,even);
+        for(int steps = 0;steps<N_steps;steps++){
+            SOR(pot,pot,density,N,h,SOR_omega,odd);
+            SOR(pot,pot,density,N,h,SOR_omega,even);
         }
         
        
-        if(MyRank==0)Error(potential01,ans,N);
+        if(MyRank==0)Error(pot,ans,N);
     }
+
+
+    //Output Time
+    auto elapsed = chrono::steady_clock::now() - start;
+    auto sec_double = chrono::duration<double>(elapsed);     // double
+    cout<<"Total Time:"<<sec_double.count()<<"s"<<endl;
     MPI_Finalize();
 } // FUNCTION : main 
